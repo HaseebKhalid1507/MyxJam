@@ -16,9 +16,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Query parameter 'q' is required" }, { status: 400 });
   }
 
+  // Sanitize search query
+  const sanitizedQuery = query.slice(0, 100).trim();
+  
+  if (!sanitizedQuery) {
+    return NextResponse.json({ error: "Query cannot be empty" }, { status: 400 });
+  }
+
   try {
     const spotify = createSpotifyClient(session.accessToken);
-    const artists = await spotify.searchArtists(query);
+    const artists = await spotify.searchArtists(sanitizedQuery);
     return NextResponse.json({ artists });
   } catch (error) {
     console.error("Search artists error:", error);

@@ -20,6 +20,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Input validation & sanitization
+    const sanitizedName = String(name).slice(0, 100).trim();
+    const sanitizedDescription = description ? String(description).slice(0, 300).trim() : "";
+    
+    // Validate track URIs format (spotify:track:xxxxx)
+    const validTrackUris = trackUris.filter(
+      (uri): uri is string => 
+        typeof uri === "string" && 
+        /^spotify:track:[a-zA-Z0-9]{22}$/.test(uri)
+    );
+
+    if (validTrackUris.length === 0) {
+      return NextResponse.json(
+        { error: "No valid track URIs provided" },
+        { status: 400 }
+      );
+    }
+
+    // Limit tracks to prevent abuse (max 100)
+    const limitedTrackUris = validTrackUris.slice(0, 100);
+
     const spotify = createSpotifyClient(session.accessToken);
     
     // Get current user
@@ -28,13 +49,13 @@ export async function POST(request: NextRequest) {
     // Create playlist
     const playlist = await spotify.createPlaylist(
       user.id,
-      name,
-      description || `Created with MyxJam`,
+      sanitizedName,
+      sanitizedDescription || `Created with MyxJam`,
       false // private by default
     );
 
     // Add tracks
-    await spotify.addTracksToPlaylist(playlist.id, trackUris);
+    await spotify.addTracksToPlaylist(playlist.id, limitedTrackUris);
 
     return NextResponse.json({
       playlist: {
