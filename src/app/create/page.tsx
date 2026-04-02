@@ -368,7 +368,7 @@ export default function CreatePage() {
               {/* Search Results */}
               {searchResults.length > 0 && (
                 <div className="mt-3 max-h-80 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/80 backdrop-blur-sm">
-                  {searchResults.map((item, index) => {
+                  {searchResults.filter((item) => item !== null).map((item, index) => {
                     const image = item.images?.[0]?.url;
                     const isAdded = selectedSources.some(s => s.id === item.id);
                     const subtitle = sourceType === "artist"
