@@ -14,10 +14,10 @@ export default function Home() {
     setMounted(true);
   }, []);
 
-  // Redirect authenticated users to create page
+  // Redirect authenticated users to dashboard
   useEffect(() => {
     if (status === "authenticated") {
-      router.push("/create");
+      router.push("/dashboard");
     }
   }, [status, router]);
 

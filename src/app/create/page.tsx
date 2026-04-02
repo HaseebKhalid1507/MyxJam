@@ -260,6 +260,7 @@ export default function CreatePage() {
             <span className="text-xl font-bold tracking-tight">MyxJam</span>
           </a>
           <div className="flex items-center gap-4">
+            <a href="/dashboard" className="text-sm text-zinc-400 hover:text-white transition-colors">Home</a>
             <a href="/create" className="text-sm text-[#1DB954] font-medium">Create</a>
             <a href="/stats" className="text-sm text-zinc-400 hover:text-white transition-colors">Stats</a>
             <a href="/archaeology" className="text-sm text-zinc-400 hover:text-white transition-colors">Dig</a>
