@@ -80,18 +80,23 @@ export default function DashboardPage() {
 
   // Player controls
   const playerAction = async (action: string) => {
-    await fetch('/api/spotify/player', {
+    // Instant UI update
+    if (action === 'pause' || action === 'play') {
+      setNowPlaying((prev: any) => prev ? { ...prev, playing: action === 'play' } : prev);
+    }
+    fetch('/api/spotify/player', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
+    }).then(() => {
+      // Sync with Spotify after action completes
+      setTimeout(() => {
+        fetch('/api/spotify/now-playing').then((r) => r.ok ? r.json() : null).then((np) => {
+          setNowPlaying(np);
+          if (np?.playing && np.track) setLocalProgress(np.track.progress_ms);
+        });
+      }, 500);
     });
-    // Refetch state after a short delay
-    setTimeout(() => {
-      fetch('/api/spotify/now-playing').then((r) => r.ok ? r.json() : null).then((np) => {
-        setNowPlaying(np);
-        if (np?.playing && np.track) setLocalProgress(np.track.progress_ms);
-      });
-    }, 300);
   };
 
   // Sync extra tracks with lyrics
@@ -197,16 +202,17 @@ export default function DashboardPage() {
         </div>
 
         {/* Now Playing */}
-        {nowPlaying?.playing && nowPlaying.track && (
+        {nowPlaying?.track && (
           <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_260px]">
             <div
               className="group relative flex items-center gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all duration-500 ease-out animate-[cardIn_600ms_ease-out]"
             >
-              <div className="relative h-40 w-48 flex-shrink-0">
+              <div className="flex flex-col items-center flex-shrink-0">
+              <div className="relative h-40 w-48 translate-x-2 cursor-pointer" onClick={() => playerAction(nowPlaying.playing ? 'pause' : 'play')}>
                 {nowPlaying.track.image && (
                   <div className="relative h-40 w-40">
                     {/* Spinning vinyl */}
-                    <div className="absolute inset-0 animate-[spin_16s_linear_infinite] rounded-full bg-zinc-900 shadow-2xl">
+                    <div className="absolute inset-0 rounded-full bg-zinc-900 shadow-2xl ring-2 ring-white/25 animate-[spin_16s_linear_infinite]" style={{ animationPlayState: nowPlaying.playing ? 'running' : 'paused' }}>
                       <Image
                         src={nowPlaying.track.image}
                         alt={nowPlaying.track.album}
@@ -233,6 +239,19 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              {/* Media controls under record when lyrics open */}
+              <div
+                className="overflow-hidden transition-[max-height,opacity] duration-500 ease-out w-48 flex justify-center pr-4"
+                style={{
+                  maxHeight: lyricsOpen ? '60px' : '0px',
+                  opacity: lyricsOpen ? 1 : 0,
+                }}
+              >
+                <div style={{ paddingTop: '24px' }}>
+                  <MediaControls playing={nowPlaying.playing} onAction={playerAction} />
+                </div>
+              </div>
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="mb-0.5 flex items-center gap-2">
                   <span className="text-xs font-medium text-[#1DB954]">NOW PLAYING</span>
@@ -254,33 +273,15 @@ export default function DashboardPage() {
                 <div className="truncate text-sm text-zinc-400 mb-3">
                   {nowPlaying.track.artists.join(", ")}{nowPlaying.track.album ? ` · ${nowPlaying.track.album.length > 40 ? nowPlaying.track.album.slice(0, 40) + '…' : nowPlaying.track.album}` : ''}
                 </div>
-                {/* Media Controls */}
-                <div className="mb-3 flex items-center gap-3">
-                  <button
-                    onClick={(e) => { e.preventDefault(); playerAction('previous'); }}
-                    className="text-zinc-500 hover:text-white transition-colors"
-                    title="Previous"
-                  >
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
-                  </button>
-                  <button
-                    onClick={(e) => { e.preventDefault(); playerAction(nowPlaying.playing ? 'pause' : 'play'); }}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black hover:scale-105 transition-transform"
-                    title={nowPlaying.playing ? "Pause" : "Play"}
-                  >
-                    {nowPlaying.playing ? (
-                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                    ) : (
-                      <svg className="h-5 w-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    )}
-                  </button>
-                  <button
-                    onClick={(e) => { e.preventDefault(); playerAction('next'); }}
-                    className="text-zinc-500 hover:text-white transition-colors"
-                    title="Next"
-                  >
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
-                  </button>
+                {/* Media Controls (visible when lyrics closed) */}
+                <div
+                  className="overflow-hidden transition-[max-height,opacity] duration-500 ease-out"
+                  style={{
+                    maxHeight: lyricsOpen ? '0px' : '50px',
+                    opacity: lyricsOpen ? 0 : 1,
+                  }}
+                >
+                  <MediaControls playing={nowPlaying.playing} onAction={playerAction} />
                 </div>
 
                 {/* Lyrics toggle */}
@@ -347,8 +348,8 @@ export default function DashboardPage() {
               <div className="hidden lg:flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all duration-500 ease-out animate-[cardInRight_600ms_ease-out_150ms_both]">
                 <span className="mb-3 text-xs font-medium text-zinc-500">UP NEXT</span>
                 <div className="flex flex-col gap-2.5 flex-1 transition-all duration-500 ease-out">
-                  {nowPlaying.nextUp.slice(0, extraTracks ? 6 : 4).map((track: any, i: number) => (
-                    <div key={track.name + i} className={`flex items-center gap-2.5${i >= 4 ? ' animate-[cardIn_300ms_ease-out]' : ''}`}>
+                  {nowPlaying.nextUp.slice(0, 4).map((track: any, i: number) => (
+                    <div key={nowPlaying.track.name + track.name + i} className="flex items-center gap-2.5" style={{ animation: `cardIn 300ms ease-out ${i * 60}ms both` }}>
                       {track.image && (
                         <Image
                           src={track.image}
@@ -364,6 +365,26 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ))}
+                  {/* Extra tracks 5-7, animated */}
+                  <div
+                    className="overflow-hidden transition-[max-height,opacity] duration-500 ease-out flex flex-col gap-2.5"
+                    style={{
+                      maxHeight: extraTracks ? '150px' : '0px',
+                      opacity: extraTracks ? 1 : 0,
+                    }}
+                  >
+                    {nowPlaying.nextUp.slice(4, 7).map((track: any, i: number) => (
+                      <div key={nowPlaying.track.name + track.name + (i + 4)} className="flex items-center gap-2.5" style={{ animation: extraTracks ? `cardIn 300ms ease-out ${(i + 4) * 60}ms both` : 'none' }}>
+                        {track.image && (
+                          <Image src={track.image} alt={track.album} width={32} height={32} className="h-8 w-8 rounded-md object-cover flex-shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-medium">{track.name}</div>
+                          <div className="truncate text-[11px] text-zinc-500">{track.artists.join(", ")}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -655,6 +676,38 @@ function SyncedLyrics({ data, loading, progressMs }: { data: any; loading: boole
   return (
     <div className="mb-3 max-h-52 overflow-y-auto rounded-xl bg-zinc-800/50 p-4">
       <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-300">{data.plainLyrics}</pre>
+    </div>
+  );
+}
+
+function MediaControls({ playing, onAction }: { playing: boolean; onAction: (action: string) => void }) {
+  return (
+    <div className="mb-3 flex items-center gap-3">
+      <button
+        onClick={(e) => { e.preventDefault(); onAction('previous'); }}
+        className="text-zinc-500 hover:text-white transition-colors"
+        title="Previous"
+      >
+        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+      </button>
+      <button
+        onClick={(e) => { e.preventDefault(); onAction(playing ? 'pause' : 'play'); }}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black hover:scale-105 transition-transform"
+        title={playing ? "Pause" : "Play"}
+      >
+        {playing ? (
+          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+        ) : (
+          <svg className="h-5 w-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+        )}
+      </button>
+      <button
+        onClick={(e) => { e.preventDefault(); onAction('next'); }}
+        className="text-zinc-500 hover:text-white transition-colors"
+        title="Next"
+      >
+        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
+      </button>
     </div>
   );
 }
