@@ -153,6 +153,43 @@ class SpotifyClient {
     return allFeatures;
   }
 
+  async getPlaylist(playlistId: string): Promise<any> {
+    return this.fetch<any>(`/playlists/${playlistId}?fields=id,name,description,images,owner(display_name,id),tracks(total,items(track(id,name,uri,duration_ms,artists(name),album(name,images))))`);
+  }
+
+  async getAlbum(albumId: string): Promise<any> {
+    return this.fetch<any>(`/albums/${albumId}`);
+  }
+
+  async getAlbumTracks(albumId: string): Promise<SpotifyTrack[]> {
+    const data = await this.fetch<{ items: SpotifyTrack[] }>(`/albums/${albumId}/tracks?limit=50`);
+    // Album tracks don't include album info, need to fetch it
+    const album = await this.getAlbum(albumId);
+    return data.items.map((t) => ({
+      ...t,
+      album: { id: album.id, name: album.name, images: album.images },
+    }));
+  }
+
+  async getPlaylistTracks(playlistId: string): Promise<SpotifyTrack[]> {
+    const data = await this.fetch<{ items: { track: SpotifyTrack }[] }>(
+      `/playlists/${playlistId}/tracks?limit=100&fields=items(track(id,name,uri,duration_ms,artists(id,name),album(id,name,images)))`
+    );
+    return data.items.map((i) => i.track).filter((t) => t !== null);
+  }
+
+  async searchAlbums(query: string, limit = 10): Promise<any[]> {
+    const params = new URLSearchParams({ q: query, type: "album", limit: limit.toString() });
+    const data = await this.fetch<{ albums: { items: any[] } }>(`/search?${params}`);
+    return data.albums.items;
+  }
+
+  async searchPlaylists(query: string, limit = 10): Promise<any[]> {
+    const params = new URLSearchParams({ q: query, type: "playlist", limit: limit.toString() });
+    const data = await this.fetch<{ playlists: { items: any[] } }>(`/search?${params}`);
+    return data.playlists.items;
+  }
+
   async addTracksToPlaylist(playlistId: string, trackUris: string[]): Promise<{ snapshot_id: string }> {
     // Spotify allows max 100 tracks per request
     const chunks = [];

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { AuthButton } from "@/components/auth-button";
 
+type SourceType = "artist" | "album" | "playlist";
+
 interface Artist {
   id: string;
   name: string;
@@ -26,8 +28,13 @@ interface Track {
   artists: { name: string }[];
 }
 
-interface SelectedArtist extends Artist {
-  tracks?: Track[];
+interface SelectedSource {
+  id: string;
+  name: string;
+  type: SourceType;
+  image?: string;
+  subtitle: string;
+  tracks: Track[];
 }
 
 export default function CreatePage() {
@@ -35,10 +42,11 @@ export default function CreatePage() {
   const router = useRouter();
   
   // State
+  const [sourceType, setSourceType] = useState<SourceType>("artist");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Artist[]>([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedArtists, setSelectedArtists] = useState<SelectedArtist[]>([]);
+  const [selectedSources, setSelectedSources] = useState<SelectedSource[]>([]);
   const [tracksPerArtist, setTracksPerArtist] = useState(5);
   const [playlistName, setPlaylistName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -58,8 +66,8 @@ export default function CreatePage() {
     }
   }, [status, router]);
 
-  // Search artists
-  const searchArtists = useCallback(async (query: string) => {
+  // Search (artists, albums, or playlists)
+  const doSearch = useCallback(async (query: string, type: SourceType) => {
     if (!query.trim()) {
       setSearchResults([]);
       return;
@@ -69,12 +77,17 @@ export default function CreatePage() {
     setError(null);
     
     try {
-      const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(query)}`);
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.error);
-      
-      setSearchResults(data.artists);
+      if (type === "artist") {
+        const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        setSearchResults(data.artists);
+      } else {
+        const response = await fetch(`/api/spotify/search-all?q=${encodeURIComponent(query)}&type=${type}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        setSearchResults(type === "album" ? data.albums : data.playlists);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {
@@ -85,42 +98,83 @@ export default function CreatePage() {
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (searchQuery) searchArtists(searchQuery);
+      if (searchQuery) doSearch(searchQuery, sourceType);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, searchArtists]);
+  }, [searchQuery, sourceType, doSearch]);
 
-  // Add artist
-  const addArtist = async (artist: Artist) => {
-    if (selectedArtists.find(a => a.id === artist.id)) return;
-    
+  // Clear results when switching source type
+  useEffect(() => {
+    setSearchResults([]);
+    setSearchQuery("");
+  }, [sourceType]);
+
+  // Add source (artist, album, or playlist)
+  const addSource = async (item: any) => {
+    if (selectedSources.find(s => s.id === item.id)) return;
     setError(null);
     
     try {
-      // Fetch top tracks for this artist
-      const response = await fetch(`/api/spotify/artists/${artist.id}/top-tracks`);
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.error);
-      
-      setSelectedArtists(prev => [...prev, { ...artist, tracks: data.tracks }]);
+      let tracks: Track[] = [];
+      let source: SelectedSource;
+
+      if (sourceType === "artist") {
+        const response = await fetch(`/api/spotify/artists/${item.id}/top-tracks`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        tracks = data.tracks;
+        source = {
+          id: item.id, name: item.name, type: "artist",
+          image: item.images?.[0]?.url,
+          subtitle: `${formatNumber(item.followers?.total || 0)} followers`,
+          tracks,
+        };
+      } else if (sourceType === "album") {
+        const response = await fetch(`/api/spotify/albums/${item.id}/tracks`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        tracks = data.tracks;
+        source = {
+          id: item.id, name: item.name, type: "album",
+          image: item.images?.[0]?.url,
+          subtitle: `${item.artists?.map((a: any) => a.name).join(", ")} · ${item.total_tracks} tracks`,
+          tracks,
+        };
+      } else {
+        const response = await fetch(`/api/spotify/playlists/${item.id}/tracks`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        tracks = data.tracks;
+        source = {
+          id: item.id, name: item.name, type: "playlist",
+          image: item.images?.[0]?.url,
+          subtitle: `by ${item.owner?.display_name || "Unknown"} · ${item.tracks?.total || tracks.length} tracks`,
+          tracks,
+        };
+      }
+
+      setSelectedSources(prev => [...prev, source]);
       setSearchQuery("");
       setSearchResults([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add artist");
+      setError(err instanceof Error ? err.message : "Failed to add");
     }
   };
 
-  // Remove artist
-  const removeArtist = (artistId: string) => {
-    setSelectedArtists(prev => prev.filter(a => a.id !== artistId));
+  // Remove source
+  const removeSource = (id: string) => {
+    setSelectedSources(prev => prev.filter(s => s.id !== id));
   };
 
   // Get all selected tracks
   const getSelectedTracks = () => {
-    return selectedArtists.flatMap(artist => 
-      (artist.tracks || []).slice(0, tracksPerArtist)
-    );
+    return selectedSources.flatMap(source => {
+      if (source.type === "artist") {
+        return source.tracks.slice(0, tracksPerArtist);
+      }
+      // Albums and playlists: include all tracks
+      return source.tracks;
+    });
   };
 
   // Create playlist
@@ -132,6 +186,7 @@ export default function CreatePage() {
     }
 
     const name = playlistName.trim() || `MyxJam - ${new Date().toLocaleDateString()}`;
+    const sourceNames = selectedSources.map(s => s.name).join(", ");
     
     setIsCreating(true);
     setError(null);
@@ -142,7 +197,7 @@ export default function CreatePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          description: `Created with MyxJam • ${selectedArtists.map(a => a.name).join(", ")}`,
+          description: `Created with MyxJam • ${sourceNames}`,
           trackUris: tracks.map(t => t.uri),
         }),
       });
@@ -160,7 +215,7 @@ export default function CreatePage() {
 
   // Reset
   const reset = () => {
-    setSelectedArtists([]);
+    setSelectedSources([]);
     setCreatedPlaylist(null);
     setPlaylistName("");
     setError(null);
@@ -269,11 +324,30 @@ export default function CreatePage() {
               </div>
             )}
 
+            {/* Source Type Tabs */}
+            <section className="mb-6">
+              <div className="flex rounded-xl border border-zinc-800 bg-zinc-900/50 p-1">
+                {(["artist", "album", "playlist"] as SourceType[]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setSourceType(type)}
+                    className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                      sourceType === type
+                        ? "bg-[#1DB954] text-white shadow-lg shadow-[#1DB954]/25"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    {type === "artist" ? "🎤 Artists" : type === "album" ? "💿 Albums" : "📋 Playlists"}
+                  </button>
+                ))}
+              </div>
+            </section>
+
             {/* Search Section */}
             <section className="mb-10">
               <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-400">
                 <SearchIcon className="h-4 w-4" />
-                <span>Search Artists</span>
+                <span>Search {sourceType === "artist" ? "Artists" : sourceType === "album" ? "Albums" : "Playlists"}</span>
               </div>
               <div className="relative">
                 <input
@@ -294,90 +368,99 @@ export default function CreatePage() {
               {/* Search Results */}
               {searchResults.length > 0 && (
                 <div className="mt-3 max-h-80 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/80 backdrop-blur-sm">
-                  {searchResults.map((artist, index) => (
-                    <button
-                      key={artist.id}
-                      onClick={() => addArtist(artist)}
-                      disabled={selectedArtists.some(a => a.id === artist.id)}
-                      className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-all hover:bg-zinc-800/80 disabled:opacity-50 ${
-                        index !== 0 ? 'border-t border-zinc-800/50' : ''
-                      }`}
-                    >
-                      {artist.images[0] ? (
-                        <Image
-                          src={artist.images[0].url}
-                          alt={artist.name}
-                          width={52}
-                          height={52}
-                          className="h-13 w-13 rounded-full object-cover ring-2 ring-zinc-700"
-                        />
-                      ) : (
-                        <div className="flex h-13 w-13 items-center justify-center rounded-full bg-zinc-800 ring-2 ring-zinc-700">
-                          <MusicIcon className="h-6 w-6 text-zinc-500" />
+                  {searchResults.map((item, index) => {
+                    const image = item.images?.[0]?.url;
+                    const isAdded = selectedSources.some(s => s.id === item.id);
+                    const subtitle = sourceType === "artist"
+                      ? `${formatNumber(item.followers?.total || 0)} followers`
+                      : sourceType === "album"
+                      ? `${item.artists?.map((a: any) => a.name).join(", ")} · ${item.total_tracks} tracks`
+                      : `by ${item.owner?.display_name || "Unknown"} · ${item.tracks?.total || 0} tracks`;
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => addSource(item)}
+                        disabled={isAdded}
+                        className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-all hover:bg-zinc-800/80 disabled:opacity-50 ${
+                          index !== 0 ? 'border-t border-zinc-800/50' : ''
+                        }`}
+                      >
+                        {image ? (
+                          <Image
+                            src={image}
+                            alt={item.name}
+                            width={52}
+                            height={52}
+                            className={`h-13 w-13 object-cover ring-2 ring-zinc-700 ${sourceType === "artist" ? "rounded-full" : "rounded-lg"}`}
+                          />
+                        ) : (
+                          <div className={`flex h-13 w-13 items-center justify-center bg-zinc-800 ring-2 ring-zinc-700 ${sourceType === "artist" ? "rounded-full" : "rounded-lg"}`}>
+                            <MusicIcon className="h-6 w-6 text-zinc-500" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="font-semibold">{item.name}</div>
+                          <div className="text-sm text-zinc-500">{subtitle}</div>
                         </div>
-                      )}
-                      <div className="flex-1">
-                        <div className="font-semibold">{artist.name}</div>
-                        <div className="text-sm text-zinc-500">
-                          {formatNumber(artist.followers.total)} followers
-                        </div>
-                      </div>
-                      {selectedArtists.some(a => a.id === artist.id) ? (
-                        <span className="flex items-center gap-1 text-sm font-medium text-[#1DB954]">
-                          <CheckIcon className="h-4 w-4" />
-                          Added
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400 transition-colors group-hover:bg-[#1DB954] group-hover:text-white">
-                          Add
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                        {isAdded ? (
+                          <span className="flex items-center gap-1 text-sm font-medium text-[#1DB954]">
+                            <CheckIcon className="h-4 w-4" /> Added
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-400">Add</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </section>
 
-            {/* Selected Artists */}
-            {selectedArtists.length > 0 && (
+            {/* Selected Sources */}
+            {selectedSources.length > 0 && (
               <section className="mb-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-medium text-zinc-400">
                     <UsersIcon className="h-4 w-4" />
-                    <span>Selected Artists</span>
+                    <span>Selected Sources</span>
                     <span className="ml-1 rounded-full bg-[#1DB954] px-2 py-0.5 text-xs font-bold text-white">
-                      {selectedArtists.length}
+                      {selectedSources.length}
                     </span>
                   </div>
                   <button
-                    onClick={() => setSelectedArtists([])}
+                    onClick={() => setSelectedSources([])}
                     className="text-sm text-zinc-500 transition-colors hover:text-white"
                   >
                     Clear all
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  {selectedArtists.map((artist) => (
+                  {selectedSources.map((source) => (
                     <div
-                      key={artist.id}
+                      key={source.id}
                       className="group flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 py-1.5 pl-1.5 pr-4 transition-all hover:border-zinc-700 hover:bg-zinc-800"
                     >
-                      {artist.images[0] ? (
+                      {source.image ? (
                         <Image
-                          src={artist.images[0].url}
-                          alt={artist.name}
+                          src={source.image}
+                          alt={source.name}
                           width={32}
                           height={32}
-                          className="h-8 w-8 rounded-full object-cover"
+                          className={`h-8 w-8 object-cover ${source.type === "artist" ? "rounded-full" : "rounded-md"}`}
                         />
                       ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800">
+                        <div className={`flex h-8 w-8 items-center justify-center bg-zinc-800 ${source.type === "artist" ? "rounded-full" : "rounded-md"}`}>
                           <MusicIcon className="h-4 w-4 text-zinc-500" />
                         </div>
                       )}
-                      <span className="font-medium">{artist.name}</span>
+                      <span className="font-medium">{source.name}</span>
+                      <span className="text-xs text-zinc-500">
+                        {source.type === "artist" ? "🎤" : source.type === "album" ? "💿" : "📋"}
+                        {source.tracks.length} tracks
+                      </span>
                       <button
-                        onClick={() => removeArtist(artist.id)}
+                        onClick={() => removeSource(source.id)}
                         className="ml-1 rounded-full p-1 text-zinc-500 transition-colors hover:bg-zinc-700 hover:text-white"
                       >
                         <XIcon className="h-3.5 w-3.5" />
@@ -389,14 +472,14 @@ export default function CreatePage() {
             )}
 
             {/* Settings */}
-            {selectedArtists.length > 0 && (
+            {selectedSources.length > 0 && (
               <section className="mb-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-400">
                   <SlidersIcon className="h-4 w-4" />
                   <span>Settings</span>
                 </div>
                 <div className="grid gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 sm:grid-cols-2">
-                  <div>
+                  {selectedSources.some(s => s.type === "artist") && <div>
                     <label className="mb-3 block text-sm font-medium text-zinc-300">
                       Songs per artist
                     </label>
@@ -424,7 +507,7 @@ export default function CreatePage() {
                         +
                       </button>
                     </div>
-                  </div>
+                  </div>}
                   <div>
                     <label className="mb-3 block text-sm font-medium text-zinc-300">
                       Playlist name
@@ -489,7 +572,7 @@ export default function CreatePage() {
             )}
 
             {/* Create Button */}
-            {selectedArtists.length > 0 && (
+            {selectedSources.length > 0 && (
               <button
                 onClick={createPlaylist}
                 disabled={isCreating || selectedTracks.length === 0}
@@ -513,13 +596,13 @@ export default function CreatePage() {
             )}
 
             {/* Empty State */}
-            {selectedArtists.length === 0 && (
+            {selectedSources.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-zinc-900 ring-1 ring-zinc-800">
                   <MusicIcon className="h-10 w-10 text-zinc-600" />
                 </div>
-                <h3 className="mb-2 text-xl font-semibold text-zinc-400">No artists selected</h3>
-                <p className="text-zinc-500">Search for artists above to start building your playlist</p>
+                <h3 className="mb-2 text-xl font-semibold text-zinc-400">Nothing selected yet</h3>
+                <p className="text-zinc-500">Search for artists, albums, or playlists to start building your mix</p>
               </div>
             )}
           </div>
