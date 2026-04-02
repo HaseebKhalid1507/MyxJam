@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [localProgress, setLocalProgress] = useState(0);
   const [lyricsData, setLyricsData] = useState<{ synced: boolean; lines: { time: number; text: string }[]; plainLyrics: string | null } | null>(null);
   const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [extraTracks, setExtraTracks] = useState(false);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const [lastLyricsTrack, setLastLyricsTrack] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -76,6 +77,11 @@ export default function DashboardPage() {
     }, 30000);
     return () => clearInterval(interval);
   }, [status]);
+
+  // Sync extra tracks with lyrics
+  useEffect(() => {
+    setExtraTracks(lyricsOpen);
+  }, [lyricsOpen]);
 
   // Clear lyrics when track changes
   useEffect(() => {
@@ -296,8 +302,8 @@ export default function DashboardPage() {
               <div className="hidden lg:flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all duration-500 ease-out animate-[cardInRight_600ms_ease-out_150ms_both]">
                 <span className="mb-3 text-xs font-medium text-zinc-500">UP NEXT</span>
                 <div className="flex flex-col gap-2.5 flex-1 transition-all duration-500 ease-out">
-                  {nowPlaying.nextUp.slice(0, lyricsOpen ? 6 : 4).map((track: any, i: number) => (
-                    <div key={i} className="flex items-center gap-2.5">
+                  {nowPlaying.nextUp.slice(0, extraTracks ? 6 : 4).map((track: any, i: number) => (
+                    <div key={track.name + i} className={`flex items-center gap-2.5${i >= 4 ? ' animate-[cardIn_300ms_ease-out]' : ''}`}>
                       {track.image && (
                         <Image
                           src={track.image}
@@ -541,8 +547,8 @@ function QuickAction({ href, icon, title, subtitle, color }: { href: string; ico
 function SyncedLyrics({ data, loading, progressMs }: { data: any; loading: boolean; progressMs: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Find current line index (offset 750ms ahead to compensate for API/render delay)
-  const adjustedProgress = progressMs + 750;
+  // Find current line index (offset ahead to compensate for API/render delay)
+  const adjustedProgress = progressMs + 1500;
   let currentIdx = -1;
   if (data?.synced && data.lines?.length > 0) {
     for (let i = data.lines.length - 1; i >= 0; i--) {

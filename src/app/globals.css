@@ -49,6 +49,17 @@ body {
   }
 }
 
+@keyframes cardOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
 @keyframes cardInRight {
   from {
     opacity: 0;
