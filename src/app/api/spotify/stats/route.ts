@@ -20,14 +20,8 @@ export async function GET(request: NextRequest) {
       spotify.getRecentlyPlayed(50),
     ]);
 
-    // Get audio features for top tracks (non-fatal — 403 if app not approved)
-    let audioFeatures: Awaited<ReturnType<typeof spotify.getAudioFeatures>> = [];
-    try {
-      const trackIds = topTracks.map((t) => t.id);
-      audioFeatures = await spotify.getAudioFeatures(trackIds);
-    } catch (e) {
-      console.warn("Audio features unavailable:", e instanceof Error ? e.message : e);
-    }
+    // Audio features endpoint is deprecated (Nov 2024). Skip it.
+    const audioFeatures: any[] = [];
 
     // Calculate genre breakdown
     const genreCounts: Record<string, number> = {};
@@ -41,19 +35,25 @@ export async function GET(request: NextRequest) {
       .slice(0, 12)
       .map(([genre, count]) => ({ genre, count }));
 
-    // Calculate average audio features
-    const avgFeatures = audioFeatures.length > 0
-      ? {
-          danceability: avg(audioFeatures.map((f) => f.danceability)),
-          energy: avg(audioFeatures.map((f) => f.energy)),
-          valence: avg(audioFeatures.map((f) => f.valence)),
-          acousticness: avg(audioFeatures.map((f) => f.acousticness)),
-          instrumentalness: avg(audioFeatures.map((f) => f.instrumentalness)),
-          tempo: avg(audioFeatures.map((f) => f.tempo)),
-          speechiness: avg(audioFeatures.map((f) => f.speechiness)),
-          liveness: avg(audioFeatures.map((f) => f.liveness)),
-        }
-      : null;
+    // Music personality derived from genres + artist popularity
+    const allGenres = topArtists.flatMap((a) => a.genres || []);
+    const genreStr = allGenres.join(" ").toLowerCase();
+    const avgPopularity = topArtists.length > 0
+      ? topArtists.reduce((sum: number, a: any) => sum + (a.popularity || 50), 0) / topArtists.length
+      : 50;
+
+    const musicPersonality = {
+      mainstream: Math.min(1, avgPopularity / 100),
+      underground: Math.max(0, 1 - avgPopularity / 100),
+      hip_hop: score(genreStr, ["rap", "hip hop", "trap", "drill", "r&b"]),
+      rock: score(genreStr, ["rock", "metal", "punk", "grunge", "alternative"]),
+      electronic: score(genreStr, ["edm", "electronic", "house", "techno", "dubstep", "dnb"]),
+      pop: score(genreStr, ["pop", "dance pop", "synth", "k-pop"]),
+      indie: score(genreStr, ["indie", "lo-fi", "bedroom", "shoegaze", "dream pop"]),
+      soul: score(genreStr, ["soul", "jazz", "blues", "funk", "neo soul", "gospel"]),
+      country_folk: score(genreStr, ["country", "folk", "bluegrass", "americana"]),
+      latin: score(genreStr, ["latin", "reggaeton", "salsa", "bachata", "corrido"]),
+    };
 
     // Listening hours from recently played
     const totalDurationMs = recentlyPlayed.reduce(
@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
       topArtists,
       topTracks: topTracks.slice(0, 20),
       topGenres,
-      audioFeatures: avgFeatures,
+      audioFeatures: null, // deprecated endpoint
+      musicPersonality,
       recentlyPlayed: recentlyPlayed.slice(0, 20),
       stats: {
         totalRecentMinutes: Math.round(totalDurationMs / 60000),
@@ -86,4 +87,9 @@ function avg(nums: number[]): number {
   return nums.length > 0
     ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100
     : 0;
+}
+
+function score(genreStr: string, keywords: string[]): number {
+  const matches = keywords.filter((kw) => genreStr.includes(kw)).length;
+  return Math.min(1, Math.round((matches / Math.max(keywords.length * 0.4, 1)) * 100) / 100);
 }

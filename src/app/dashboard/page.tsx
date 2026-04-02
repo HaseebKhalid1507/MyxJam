@@ -26,12 +26,14 @@ interface ArchData {
   stats: { totalDugUp: number; stillLovedCount: number };
 }
 
-const FEATURE_LABELS: Record<string, { label: string; emoji: string }> = {
-  danceability: { label: "Dance", emoji: "💃" },
-  energy: { label: "Energy", emoji: "⚡" },
-  valence: { label: "Happy", emoji: "😊" },
-  acousticness: { label: "Acoustic", emoji: "🎸" },
-  instrumentalness: { label: "Instrumental", emoji: "🎹" },
+const PERSONALITY_LABELS: Record<string, { label: string; emoji: string }> = {
+  mainstream: { label: "Mainstream", emoji: "📻" },
+  underground: { label: "Underground", emoji: "🕳️" },
+  hip_hop: { label: "Hip-Hop", emoji: "🎤" },
+  rock: { label: "Rock", emoji: "🎸" },
+  electronic: { label: "Electronic", emoji: "🎛️" },
+  pop: { label: "Pop", emoji: "🎵" },
+  indie: { label: "Indie", emoji: "🌙" },
 };
 
 export default function DashboardPage() {
@@ -140,16 +142,17 @@ export default function DashboardPage() {
             )}
 
             <div className="grid gap-6 lg:grid-cols-3">
-              {/* Audio DNA (compact) */}
-              {statsData?.audioFeatures && (
+              {/* Music Personality (compact) */}
+              {(statsData as any)?.musicPersonality && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
                   <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold">🧬 Audio DNA</h2>
+                    <h2 className="text-lg font-bold">🧬 Music DNA</h2>
                     <a href="/stats" className="text-xs text-zinc-500 hover:text-[#1DB954]">See all →</a>
                   </div>
                   <div className="space-y-3">
-                    {Object.entries(FEATURE_LABELS).map(([key, { label, emoji }]) => {
-                      const value = (statsData.audioFeatures as any)?.[key] ?? 0;
+                    {Object.entries(PERSONALITY_LABELS).map(([key, { label, emoji }]) => {
+                      const value = ((statsData as any).musicPersonality)?.[key] ?? 0;
+                      if (value === 0) return null;
                       return (
                         <div key={key} className="flex items-center gap-3">
                           <span className="text-lg">{emoji}</span>

@@ -12,16 +12,8 @@ interface StatsData {
   topArtists: any[];
   topTracks: any[];
   topGenres: { genre: string; count: number }[];
-  audioFeatures: {
-    danceability: number;
-    energy: number;
-    valence: number;
-    acousticness: number;
-    instrumentalness: number;
-    tempo: number;
-    speechiness: number;
-    liveness: number;
-  } | null;
+  audioFeatures: any;
+  musicPersonality?: Record<string, number>;
   recentlyPlayed: any[];
   stats: {
     totalRecentMinutes: number;
@@ -36,14 +28,15 @@ const TIME_RANGE_LABELS: Record<TimeRange, string> = {
   long_term: "All Time",
 };
 
-const FEATURE_LABELS: Record<string, { label: string; emoji: string; description: string }> = {
-  danceability: { label: "Danceability", emoji: "💃", description: "How suitable for dancing" },
-  energy: { label: "Energy", emoji: "⚡", description: "Intensity and activity" },
-  valence: { label: "Happiness", emoji: "😊", description: "Musical positivity" },
-  acousticness: { label: "Acoustic", emoji: "🎸", description: "Acoustic vs electronic" },
-  instrumentalness: { label: "Instrumental", emoji: "🎹", description: "Lack of vocals" },
-  speechiness: { label: "Speechiness", emoji: "🗣️", description: "Spoken word presence" },
-  liveness: { label: "Live Feel", emoji: "🎤", description: "Audience presence" },
+const PERSONALITY_LABELS: Record<string, { label: string; emoji: string; description: string }> = {
+  mainstream: { label: "Mainstream", emoji: "📻", description: "How popular your taste is" },
+  underground: { label: "Underground", emoji: "🕳️", description: "How niche your taste is" },
+  hip_hop: { label: "Hip-Hop/R&B", emoji: "🎤", description: "Rap, trap, R&B influence" },
+  rock: { label: "Rock", emoji: "🎸", description: "Rock, metal, punk, alt" },
+  electronic: { label: "Electronic", emoji: "🎛️", description: "EDM, house, techno" },
+  pop: { label: "Pop", emoji: "🎵", description: "Pop, dance pop, synth" },
+  indie: { label: "Indie", emoji: "🌙", description: "Indie, lo-fi, dream pop" },
+  soul: { label: "Soul/Jazz", emoji: "🎷", description: "Soul, jazz, blues, funk" },
 };
 
 export default function StatsPage() {
@@ -161,14 +154,15 @@ export default function StatsPage() {
               <StatCard label="Top Genre" value={data.topGenres[0]?.genre || "—"} icon="🏷️" />
             </div>
 
-            {/* Audio DNA */}
-            {data.audioFeatures && (
+            {/* Music Personality */}
+            {data.musicPersonality && (
               <section>
-                <h2 className="mb-4 text-2xl font-bold">Your Audio DNA</h2>
+                <h2 className="mb-4 text-2xl font-bold">Your Music Personality</h2>
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {Object.entries(FEATURE_LABELS).map(([key, { label, emoji, description }]) => {
-                      const value = (data.audioFeatures as any)?.[key] ?? 0;
+                    {Object.entries(PERSONALITY_LABELS).map(([key, { label, emoji, description }]) => {
+                      const value = (data.musicPersonality as any)?.[key] ?? 0;
+                      if (value === 0) return null;
                       return (
                         <div key={key} className="flex items-center gap-4">
                           <span className="text-2xl">{emoji}</span>
@@ -189,15 +183,6 @@ export default function StatsPage() {
                       );
                     })}
                   </div>
-                  {data.audioFeatures.tempo && (
-                    <div className="mt-6 flex items-center gap-3 rounded-xl bg-zinc-800/50 px-5 py-3">
-                      <span className="text-2xl">🥁</span>
-                      <div>
-                        <span className="font-semibold">{Math.round(data.audioFeatures.tempo)} BPM</span>
-                        <span className="ml-2 text-sm text-zinc-400">Average Tempo</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </section>
             )}
