@@ -153,6 +153,18 @@ class SpotifyClient {
     return allFeatures;
   }
 
+  async getNowPlaying(): Promise<any | null> {
+    try {
+      const response = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+      if (response.status === 204 || !response.ok) return null;
+      return response.json();
+    } catch {
+      return null;
+    }
+  }
+
   async getPlaylist(playlistId: string): Promise<any> {
     return this.fetch<any>(`/playlists/${playlistId}?fields=id,name,description,images,owner(display_name,id),tracks(total,items(track(id,name,uri,duration_ms,artists(name),album(name,images))))`);
   }

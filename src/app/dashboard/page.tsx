@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [statsData, setStatsData] = useState<DashboardData | null>(null);
   const [archData, setArchData] = useState<ArchData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [nowPlaying, setNowPlaying] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -52,12 +53,20 @@ export default function DashboardPage() {
     Promise.all([
       fetch("/api/spotify/stats?time_range=short_term").then((r) => r.ok ? r.json() : null),
       fetch("/api/spotify/archaeology").then((r) => r.ok ? r.json() : null),
+      fetch("/api/spotify/now-playing").then((r) => r.ok ? r.json() : null),
     ])
-      .then(([stats, arch]) => {
+      .then(([stats, arch, np]) => {
         setStatsData(stats);
         setArchData(arch);
+        setNowPlaying(np);
       })
       .finally(() => setLoading(false));
+
+    // Poll now playing every 30s
+    const interval = setInterval(() => {
+      fetch("/api/spotify/now-playing").then((r) => r.ok ? r.json() : null).then(setNowPlaying);
+    }, 30000);
+    return () => clearInterval(interval);
   }, [status]);
 
   if (status === "loading" || !mounted) {
@@ -115,6 +124,53 @@ export default function DashboardPage() {
           </h1>
           <p className="text-lg text-zinc-400">Here&apos;s what&apos;s going on with your music</p>
         </div>
+
+        {/* Now Playing */}
+        {nowPlaying?.playing && nowPlaying.track && (
+          <div className="mb-6">
+            <a
+              href={nowPlaying.track.url || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all hover:border-[#1DB954]/50 hover:bg-zinc-900"
+            >
+              <div className="relative">
+                {nowPlaying.track.image && (
+                  <Image
+                    src={nowPlaying.track.image}
+                    alt={nowPlaying.track.album}
+                    width={56}
+                    height={56}
+                    className="h-14 w-14 rounded-lg object-cover shadow-lg"
+                  />
+                )}
+                <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1DB954] shadow">
+                  <span className="text-[10px]">▶</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 flex items-center gap-2">
+                  <span className="text-xs font-medium text-[#1DB954]">NOW PLAYING</span>
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1DB954]"></span>
+                </div>
+                <div className="truncate font-semibold">{nowPlaying.track.name}</div>
+                <div className="truncate text-sm text-zinc-400">
+                  {nowPlaying.track.artists.join(", ")} · {nowPlaying.track.album}
+                </div>
+              </div>
+              {nowPlaying.track.duration_ms > 0 && (
+                <div className="hidden sm:block w-32">
+                  <div className="h-1 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-[#1DB954]"
+                      style={{ width: `${(nowPlaying.track.progress_ms / nowPlaying.track.duration_ms) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </a>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -324,11 +380,13 @@ export default function DashboardPage() {
 // Components
 function QuickAction({ href, icon, title, subtitle, color }: { href: string; icon: string; title: string; subtitle: string; color: string }) {
   return (
-    <a href={href} className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 transition-all hover:border-zinc-700 hover:bg-zinc-900 hover:scale-[1.02]">
-      <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${color} opacity-10 blur-2xl transition-opacity group-hover:opacity-20`} />
-      <div className="mb-3 text-3xl">{icon}</div>
-      <h3 className="font-semibold">{title}</h3>
-      <p className="text-sm text-zinc-500">{subtitle}</p>
+    <a href={href} className="group relative flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 transition-all hover:border-zinc-600 hover:bg-zinc-800/80 active:scale-[0.98]">
+      <div className="text-2xl">{icon}</div>
+      <div className="flex-1">
+        <h3 className="text-sm font-semibold text-zinc-200 group-hover:text-white">{title}</h3>
+        <p className="text-xs text-zinc-500">{subtitle}</p>
+      </div>
+      <span className="text-zinc-600 transition-all group-hover:translate-x-1 group-hover:text-white">→</span>
     </a>
   );
 }
