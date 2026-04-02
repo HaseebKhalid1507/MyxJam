@@ -165,6 +165,34 @@ class SpotifyClient {
     }
   }
 
+  async pause(): Promise<void> {
+    await fetch('https://api.spotify.com/v1/me/player/pause', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${this.accessToken}` },
+    });
+  }
+
+  async play(): Promise<void> {
+    await fetch('https://api.spotify.com/v1/me/player/play', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${this.accessToken}` },
+    });
+  }
+
+  async nextTrack(): Promise<void> {
+    await fetch('https://api.spotify.com/v1/me/player/next', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.accessToken}` },
+    });
+  }
+
+  async previousTrack(): Promise<void> {
+    await fetch('https://api.spotify.com/v1/me/player/previous', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.accessToken}` },
+    });
+  }
+
   async getQueue(): Promise<any | null> {
     try {
       const response = await fetch('https://api.spotify.com/v1/me/player/queue', {

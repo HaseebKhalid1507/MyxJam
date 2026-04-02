@@ -15,6 +15,7 @@ const SPOTIFY_SCOPES = [
   "user-read-recently-played",
   "user-read-playback-state",
   "user-read-currently-playing",
+  "user-modify-playback-state",
 ].join(" ");
 
 // Use AUTH_URL env var, fallback for dev

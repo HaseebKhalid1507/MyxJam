@@ -78,6 +78,22 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [status]);
 
+  // Player controls
+  const playerAction = async (action: string) => {
+    await fetch('/api/spotify/player', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    // Refetch state after a short delay
+    setTimeout(() => {
+      fetch('/api/spotify/now-playing').then((r) => r.ok ? r.json() : null).then((np) => {
+        setNowPlaying(np);
+        if (np?.playing && np.track) setLocalProgress(np.track.progress_ms);
+      });
+    }, 300);
+  };
+
   // Sync extra tracks with lyrics
   useEffect(() => {
     setExtraTracks(lyricsOpen);
@@ -236,8 +252,37 @@ export default function DashboardPage() {
                 </div>
                 <div className="truncate font-semibold text-lg">{nowPlaying.track.name}</div>
                 <div className="truncate text-sm text-zinc-400 mb-3">
-                  {nowPlaying.track.artists.join(", ")} · {nowPlaying.track.album}
+                  {nowPlaying.track.artists.join(", ")}{nowPlaying.track.album ? ` · ${nowPlaying.track.album.length > 40 ? nowPlaying.track.album.slice(0, 40) + '…' : nowPlaying.track.album}` : ''}
                 </div>
+                {/* Media Controls */}
+                <div className="mb-3 flex items-center gap-3">
+                  <button
+                    onClick={(e) => { e.preventDefault(); playerAction('previous'); }}
+                    className="text-zinc-500 hover:text-white transition-colors"
+                    title="Previous"
+                  >
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+                  </button>
+                  <button
+                    onClick={(e) => { e.preventDefault(); playerAction(nowPlaying.playing ? 'pause' : 'play'); }}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-black hover:scale-105 transition-transform"
+                    title={nowPlaying.playing ? "Pause" : "Play"}
+                  >
+                    {nowPlaying.playing ? (
+                      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                    ) : (
+                      <svg className="h-5 w-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => { e.preventDefault(); playerAction('next'); }}
+                    className="text-zinc-500 hover:text-white transition-colors"
+                    title="Next"
+                  >
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
+                  </button>
+                </div>
+
                 {/* Lyrics toggle */}
                 <button
                   onClick={(e) => {
