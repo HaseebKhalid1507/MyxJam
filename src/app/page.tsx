@@ -39,7 +39,11 @@ export default function Home() {
             </div>
             <span className="text-xl font-bold tracking-tight">MyxJam</span>
           </div>
-          <AuthButton />
+          <div className="flex items-center gap-4">
+            <a href="/create" className="text-sm text-zinc-400 hover:text-white transition-colors">Create</a>
+            <a href="/stats" className="text-sm text-zinc-400 hover:text-white transition-colors">Stats</a>
+            <AuthButton />
+          </div>
         </div>
       </header>
 

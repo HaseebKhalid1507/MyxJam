@@ -34,6 +34,23 @@ export interface SpotifyUser {
   display_name: string;
 }
 
+export interface AudioFeatures {
+  id: string;
+  danceability: number;
+  energy: number;
+  valence: number;
+  tempo: number;
+  acousticness: number;
+  instrumentalness: number;
+  speechiness: number;
+  liveness: number;
+}
+
+export interface RecentlyPlayed {
+  track: SpotifyTrack;
+  played_at: string;
+}
+
 class SpotifyClient {
   private accessToken: string;
 
@@ -96,6 +113,44 @@ class SpotifyClient {
         public: isPublic,
       }),
     });
+  }
+
+  async getTopArtists(timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term', limit = 20): Promise<SpotifyArtist[]> {
+    const data = await this.fetch<{ items: SpotifyArtist[] }>(
+      `/me/top/artists?time_range=${timeRange}&limit=${limit}`
+    );
+    return data.items;
+  }
+
+  async getTopTracks(timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term', limit = 20): Promise<SpotifyTrack[]> {
+    const data = await this.fetch<{ items: SpotifyTrack[] }>(
+      `/me/top/tracks?time_range=${timeRange}&limit=${limit}`
+    );
+    return data.items;
+  }
+
+  async getRecentlyPlayed(limit = 50): Promise<RecentlyPlayed[]> {
+    const data = await this.fetch<{ items: RecentlyPlayed[] }>(
+      `/me/player/recently-played?limit=${limit}`
+    );
+    return data.items;
+  }
+
+  async getAudioFeatures(trackIds: string[]): Promise<AudioFeatures[]> {
+    if (trackIds.length === 0) return [];
+    // Spotify allows max 100 IDs per request
+    const chunks: string[][] = [];
+    for (let i = 0; i < trackIds.length; i += 100) {
+      chunks.push(trackIds.slice(i, i + 100));
+    }
+    const allFeatures: AudioFeatures[] = [];
+    for (const chunk of chunks) {
+      const data = await this.fetch<{ audio_features: (AudioFeatures | null)[] }>(
+        `/audio-features?ids=${chunk.join(',')}`
+      );
+      allFeatures.push(...data.audio_features.filter((f): f is AudioFeatures => f !== null));
+    }
+    return allFeatures;
   }
 
   async addTracksToPlaylist(playlistId: string, trackUris: string[]): Promise<{ snapshot_id: string }> {
