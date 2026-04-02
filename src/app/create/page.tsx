@@ -207,6 +207,7 @@ export default function CreatePage() {
           <div className="flex items-center gap-4">
             <a href="/create" className="text-sm text-[#1DB954] font-medium">Create</a>
             <a href="/stats" className="text-sm text-zinc-400 hover:text-white transition-colors">Stats</a>
+            <a href="/archaeology" className="text-sm text-zinc-400 hover:text-white transition-colors">Dig</a>
             <AuthButton />
           </div>
         </div>

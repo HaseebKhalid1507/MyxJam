@@ -20,9 +20,14 @@ export async function GET(request: NextRequest) {
       spotify.getRecentlyPlayed(50),
     ]);
 
-    // Get audio features for top tracks
-    const trackIds = topTracks.map((t) => t.id);
-    const audioFeatures = await spotify.getAudioFeatures(trackIds);
+    // Get audio features for top tracks (non-fatal — 403 if app not approved)
+    let audioFeatures: Awaited<ReturnType<typeof spotify.getAudioFeatures>> = [];
+    try {
+      const trackIds = topTracks.map((t) => t.id);
+      audioFeatures = await spotify.getAudioFeatures(trackIds);
+    } catch (e) {
+      console.warn("Audio features unavailable:", e instanceof Error ? e.message : e);
+    }
 
     // Calculate genre breakdown
     const genreCounts: Record<string, number> = {};
@@ -69,8 +74,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err) {
+    console.error("Stats API error:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch stats" },
+      { error: err instanceof Error ? err.message : "Failed to fetch stats", detail: String(err) },
       { status: 500 }
     );
   }
