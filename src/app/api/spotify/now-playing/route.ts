@@ -11,10 +11,22 @@ export async function GET() {
   const spotify = createSpotifyClient(session.accessToken);
 
   try {
-    const data = await spotify.getNowPlaying();
+    const [data, queueData] = await Promise.all([
+      spotify.getNowPlaying(),
+      spotify.getQueue(),
+    ]);
+
     if (!data || !data.item) {
       return NextResponse.json({ playing: false });
     }
+
+    const nextUp = queueData?.queue?.slice(0, 10).map((t: any) => ({
+      name: t.name,
+      artists: t.artists?.map((a: any) => a.name) || [],
+      album: t.album?.name,
+      image: t.album?.images?.[0]?.url,
+      duration_ms: t.duration_ms,
+    })) || [];
 
     return NextResponse.json({
       playing: data.is_playing,
@@ -27,6 +39,7 @@ export async function GET() {
         progress_ms: data.progress_ms,
         url: data.item.external_urls?.spotify,
       },
+      nextUp,
     });
   } catch {
     return NextResponse.json({ playing: false });

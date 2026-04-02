@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -43,6 +43,11 @@ export default function DashboardPage() {
   const [archData, setArchData] = useState<ArchData | null>(null);
   const [loading, setLoading] = useState(true);
   const [nowPlaying, setNowPlaying] = useState<any>(null);
+  const [localProgress, setLocalProgress] = useState(0);
+  const [lyricsData, setLyricsData] = useState<{ synced: boolean; lines: { time: number; text: string }[]; plainLyrics: string | null } | null>(null);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lastLyricsTrack, setLastLyricsTrack] = useState("");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -64,10 +69,54 @@ export default function DashboardPage() {
 
     // Poll now playing every 30s
     const interval = setInterval(() => {
-      fetch("/api/spotify/now-playing").then((r) => r.ok ? r.json() : null).then(setNowPlaying);
+      fetch("/api/spotify/now-playing").then((r) => r.ok ? r.json() : null).then((np) => {
+        setNowPlaying(np);
+        if (np?.playing && np.track) setLocalProgress(np.track.progress_ms);
+      });
     }, 30000);
     return () => clearInterval(interval);
   }, [status]);
+
+  // Clear lyrics when track changes
+  useEffect(() => {
+    if (!nowPlaying?.track) return;
+    const trackKey = `${nowPlaying.track.name}-${nowPlaying.track.artists?.[0]}`;
+    if (lastLyricsTrack && lastLyricsTrack !== trackKey) {
+      setLyricsData(null);
+      setLastLyricsTrack("");
+      // Auto-refetch if lyrics panel is open
+      if (lyricsOpen) {
+        setLyricsLoading(true);
+        setLastLyricsTrack(trackKey);
+        fetch(`/api/spotify/lyrics?artist=${encodeURIComponent(nowPlaying.track.artists[0])}&title=${encodeURIComponent(nowPlaying.track.name)}&duration=${nowPlaying.track.duration_ms}`)
+          .then((r) => r.json())
+          .then((d) => setLyricsData(d))
+          .catch(() => setLyricsData(null))
+          .finally(() => setLyricsLoading(false));
+      }
+    }
+  }, [nowPlaying?.track?.name]);
+
+  // Tick progress every second while playing, refetch when song should end
+  useEffect(() => {
+    if (!nowPlaying?.playing) return;
+    setLocalProgress(nowPlaying.track?.progress_ms || 0);
+    const tick = setInterval(() => {
+      setLocalProgress((p: number) => {
+        const max = nowPlaying.track?.duration_ms || 0;
+        if (max > 0 && p + 1000 >= max) {
+          // Song ended — refetch immediately
+          fetch("/api/spotify/now-playing").then((r) => r.ok ? r.json() : null).then((np) => {
+            setNowPlaying(np);
+            if (np?.playing && np.track) setLocalProgress(np.track.progress_ms);
+          });
+          return max;
+        }
+        return max > 0 ? Math.min(p + 1000, max) : p;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [nowPlaying]);
 
   if (status === "loading" || !mounted) {
     return (
@@ -127,48 +176,146 @@ export default function DashboardPage() {
 
         {/* Now Playing */}
         {nowPlaying?.playing && nowPlaying.track && (
-          <div className="mb-6">
-            <a
-              href={nowPlaying.track.url || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all hover:border-[#1DB954]/50 hover:bg-zinc-900"
+          <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_260px]">
+            <div
+              className="group relative flex items-center gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all duration-500 ease-out animate-[cardIn_600ms_ease-out]"
             >
-              <div className="relative">
+              <div className="relative h-40 w-48 flex-shrink-0">
                 {nowPlaying.track.image && (
-                  <Image
-                    src={nowPlaying.track.image}
-                    alt={nowPlaying.track.album}
-                    width={56}
-                    height={56}
-                    className="h-14 w-14 rounded-lg object-cover shadow-lg"
-                  />
+                  <div className="relative h-40 w-40">
+                    {/* Spinning vinyl */}
+                    <div className="absolute inset-0 animate-[spin_16s_linear_infinite] rounded-full bg-zinc-900 shadow-2xl">
+                      <Image
+                        src={nowPlaying.track.image}
+                        alt={nowPlaying.track.album}
+                        width={160}
+                        height={160}
+                        className="h-40 w-40 rounded-full object-cover"
+                      />
+                      <div className="absolute inset-0 rounded-full" style={{
+                        background: 'repeating-radial-gradient(circle at center, transparent 0px, transparent 5px, rgba(0,0,0,0.1) 5px, rgba(0,0,0,0.1) 6px)'
+                      }} />
+                      <div className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-zinc-700 bg-zinc-950" />
+                    </div>
+                    {/* Tonearm */}
+                    <div className="absolute -right-6 -top-2 z-10" style={{ transformOrigin: '85% 15%', transform: 'rotate(22deg)' }}>
+                      {/* Pivot base */}
+                      <div className="absolute right-0 top-0 h-4 w-4 rounded-full bg-zinc-600 shadow-md" />
+                      {/* Arm */}
+                      <div className="absolute right-1.5 top-3 h-24 w-1 origin-top rounded-full bg-gradient-to-b from-zinc-500 to-zinc-600 shadow" />
+                      {/* Headshell */}
+                      <div className="absolute right-0.5 top-[104px] h-3 w-2.5 rounded-b bg-zinc-400 shadow" />
+                      {/* Needle tip */}
+                      <div className="absolute right-1 top-[116px] h-2 w-0.5 bg-zinc-300" />
+                    </div>
+                  </div>
                 )}
-                <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1DB954] shadow">
-                  <span className="text-[10px]">▶</span>
-                </div>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="mb-0.5 flex items-center gap-2">
                   <span className="text-xs font-medium text-[#1DB954]">NOW PLAYING</span>
                   <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#1DB954]"></span>
+                  <a
+                    href={nowPlaying.track.url || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto text-zinc-600 transition-all hover:text-[#1DB954] hover:scale-110"
+                    title="Open in Spotify"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <svg className="h-7 w-7 translate-y-1" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+                    </svg>
+                  </a>
                 </div>
-                <div className="truncate font-semibold">{nowPlaying.track.name}</div>
-                <div className="truncate text-sm text-zinc-400">
+                <div className="truncate font-semibold text-lg">{nowPlaying.track.name}</div>
+                <div className="truncate text-sm text-zinc-400 mb-3">
                   {nowPlaying.track.artists.join(", ")} · {nowPlaying.track.album}
                 </div>
-              </div>
-              {nowPlaying.track.duration_ms > 0 && (
-                <div className="hidden sm:block w-32">
-                  <div className="h-1 overflow-hidden rounded-full bg-zinc-800">
-                    <div
-                      className="h-full rounded-full bg-[#1DB954]"
-                      style={{ width: `${(nowPlaying.track.progress_ms / nowPlaying.track.duration_ms) * 100}%` }}
-                    />
-                  </div>
+                {/* Lyrics toggle */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const trackKey = `${nowPlaying.track.name}-${nowPlaying.track.artists[0]}`;
+                    if (lyricsOpen) {
+                      setLyricsOpen(false);
+                    } else {
+                      setLyricsOpen(true);
+                      if (lastLyricsTrack !== trackKey) {
+                        setLyricsLoading(true);
+                        setLyricsData(null);
+                        setLastLyricsTrack(trackKey);
+                        fetch(`/api/spotify/lyrics?artist=${encodeURIComponent(nowPlaying.track.artists[0])}&title=${encodeURIComponent(nowPlaying.track.name)}&duration=${nowPlaying.track.duration_ms}`)
+                          .then((r) => r.json())
+                          .then((d) => setLyricsData(d))
+                          .catch(() => setLyricsData(null))
+                          .finally(() => setLyricsLoading(false));
+                      }
+                    }
+                  }}
+                  className="mb-2 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-[#1DB954] transition-colors"
+                >
+                  <span>{lyricsOpen ? "▼" : "▶"}</span>
+                  <span>Lyrics</span>
+                </button>
+
+                <div
+                  className="overflow-hidden transition-[max-height,opacity] duration-500 ease-out"
+                  style={{
+                    maxHeight: lyricsOpen ? '200px' : '0px',
+                    opacity: lyricsOpen ? 1 : 0,
+                  }}
+                >
+                  <SyncedLyrics
+                    data={lyricsData}
+                    loading={lyricsLoading}
+                    progressMs={localProgress}
+                  />
                 </div>
-              )}
-            </a>
+
+                {nowPlaying.track.duration_ms > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full rounded-full bg-[#1DB954] transition-[width] duration-[1000ms] ease-linear"
+                        style={{ width: `${(localProgress / nowPlaying.track.duration_ms) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] tabular-nums text-zinc-500">
+                      <span>{formatMs(localProgress)}</span>
+                      <span>{formatMs(nowPlaying.track.duration_ms)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Up Next */}
+            {nowPlaying.nextUp && nowPlaying.nextUp.length > 0 && (
+              <div className="hidden lg:flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all duration-500 ease-out animate-[cardInRight_600ms_ease-out_150ms_both]">
+                <span className="mb-3 text-xs font-medium text-zinc-500">UP NEXT</span>
+                <div className="flex flex-col gap-2.5 flex-1 transition-all duration-500 ease-out">
+                  {nowPlaying.nextUp.slice(0, lyricsOpen ? 6 : 4).map((track: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      {track.image && (
+                        <Image
+                          src={track.image}
+                          alt={track.album}
+                          width={32}
+                          height={32}
+                          className="h-8 w-8 rounded-md object-cover flex-shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium">{track.name}</div>
+                        <div className="truncate text-[11px] text-zinc-500">{track.artists.join(", ")}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -391,6 +538,76 @@ function QuickAction({ href, icon, title, subtitle, color }: { href: string; ico
   );
 }
 
+function SyncedLyrics({ data, loading, progressMs }: { data: any; loading: boolean; progressMs: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Find current line index (offset 750ms ahead to compensate for API/render delay)
+  const adjustedProgress = progressMs + 750;
+  let currentIdx = -1;
+  if (data?.synced && data.lines?.length > 0) {
+    for (let i = data.lines.length - 1; i >= 0; i--) {
+      if (adjustedProgress >= data.lines[i].time) {
+        currentIdx = i;
+        break;
+      }
+    }
+  }
+
+  // Auto-scroll to current line
+  useEffect(() => {
+    if (currentIdx < 0 || !containerRef.current) return;
+    const el = containerRef.current.children[currentIdx] as HTMLElement;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [currentIdx]);
+
+  if (loading) {
+    return (
+      <div className="mb-3 rounded-xl bg-zinc-800/50 p-4">
+        <p className="text-sm text-zinc-500 animate-pulse">Fetching lyrics...</p>
+      </div>
+    );
+  }
+
+  if (!data || (!data.synced && !data.plainLyrics)) {
+    return (
+      <div className="mb-3 rounded-xl bg-zinc-800/50 p-4">
+        <p className="text-sm text-zinc-500">Lyrics not available for this track</p>
+      </div>
+    );
+  }
+
+  // Synced lyrics
+  if (data.synced && data.lines?.length > 0) {
+    return (
+      <div ref={containerRef} className="mb-3 max-h-36 overflow-y-auto rounded-xl bg-zinc-800/50 p-4 scroll-smooth">
+        {data.lines.map((line: { time: number; text: string }, i: number) => (
+          <p
+            key={i}
+            className={`py-1 text-sm transition-all duration-300 ${
+              i === currentIdx
+                ? "text-[#1DB954] font-semibold text-base scale-[1.02] origin-left"
+                : i < currentIdx
+                ? "text-zinc-600"
+                : "text-zinc-400"
+            }`}
+          >
+            {line.text}
+          </p>
+        ))}
+      </div>
+    );
+  }
+
+  // Plain lyrics fallback
+  return (
+    <div className="mb-3 max-h-52 overflow-y-auto rounded-xl bg-zinc-800/50 p-4">
+      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-300">{data.plainLyrics}</pre>
+    </div>
+  );
+}
+
 function MiniStat({ icon, value, unit, label }: { icon: string; value: string; unit?: string; label: string }) {
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5">
@@ -410,4 +627,10 @@ function Spinner() {
 
 function MusicIcon({ className }: { className?: string }) {
   return <svg className={className} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>;
+}
+
+function formatMs(ms: number) {
+  const min = Math.floor(ms / 60000);
+  const sec = Math.floor((ms % 60000) / 1000);
+  return `${min}:${sec.toString().padStart(2, "0")}`;
 }
