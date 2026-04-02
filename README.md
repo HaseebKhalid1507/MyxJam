@@ -4,6 +4,8 @@ Your Spotify experience, elevated. Create playlists from any combination of arti
 
 **[🚀 Try it live → myx-jam.vercel.app](https://myx-jam.vercel.app)**
 
+![Dashboard Preview](public/dashboard-preview.png)
+
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss)
